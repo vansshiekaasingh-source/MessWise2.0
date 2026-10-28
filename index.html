@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MessWise: MNNIT Allahabad Refectory | Webster 2026</title>
+
+  <!-- Tailwind CSS & Custom MessWise Palette -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            deepMaroon: '#702632',
+            terracotta: '#B85C38',
+            turmericGold: '#D9A441',
+            warmIvory: '#FAF6EF',
+            riceWhite: '#FFFDF9',
+            leafGreen: '#426B4F',
+            mutedSage: '#E8EEE5',
+            charcoal: '#282725',
+            mutedStone: '#77736D',
+            softBorder: '#E8DFD3',
+            warningAmber: '#A96612',
+            errorRed: '#B42332',
+            appDark: '#171412',
+            surface: '#211D1A',
+            surfaceElevated: '#2A2521',
+            borderDark: '#3A332D',
+            textPrimary: '#F3EDE4',
+            textMuted: '#A89F94',
+            primaryDark: '#8E3445',
+            primaryAccent: '#E58A98',
+            gold: '#E4B454',
+            successDark: '#7FB28F',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Noto+Sans+Devanagari:wght@400;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', sans-serif; }
+    .font-serif { font-family: 'DM Serif Display', serif; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fadeIn { animation: fadeIn 0.25s ease-out forwards; }
+  </style>
+</head>
+<body class="bg-warmIvory text-charcoal antialiased">
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>
