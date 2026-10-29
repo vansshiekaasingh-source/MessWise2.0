@@ -1,13 +1,19 @@
 import React, { useState } from 'react';
 import { 
+  signInWithPopup,
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
-  updateProfile
+  updateProfile,
+  signOut
 } from 'firebase/auth';
-import { auth } from '../../lib/firebase';
+import { auth, googleProvider } from '../../lib/firebase';
 import { sound } from '../../lib/audio';
 
-export const AuthPage: React.FC = () => {
+interface AuthPageProps {
+  onBypassDemoLogin?: (profile: any) => void;
+}
+
+export const AuthPage: React.FC<AuthPageProps> = ({ onBypassDemoLogin }) => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -15,51 +21,77 @@ export const AuthPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // 1. Google Sign-In with strict @mnnit.ac.in domain check
+  const handleGoogleSignIn = async () => {
     setErrorMessage(null);
     setLoading(true);
 
     try {
+      googleProvider.setCustomParameters({
+        prompt: 'select_account',
+        hd: 'mnnit.ac.in' // Google Workspace domain hint
+      });
+
+      const result = await signInWithPopup(auth, googleProvider);
+      const userEmail = (result.user.email || '').toLowerCase();
+
+      // Enforce @mnnit.ac.in domain restriction
+      if (!userEmail.endsWith('@mnnit.ac.in')) {
+        await signOut(auth);
+        sound.playError();
+        setErrorMessage('Access Denied: Only verified @mnnit.ac.in Google Workspace accounts are permitted.');
+        return;
+      }
+
+      sound.playSuccess();
+    } catch (error: any) {
+      sound.playError();
+      if (error.code === 'auth/unauthorized-domain') {
+        setErrorMessage('Notice: 127.0.0.1 is not whitelisted in Firebase. Test via http://localhost:5173/ or use the demo login below.');
+      } else {
+        setErrorMessage(error.message || 'Google authentication failed.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 2. Email & Password Sign In / Sign Up
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setLoading(true);
+
+    // Enforce MNNIT domain for registration
+    if (isSignUp && !email.toLowerCase().endsWith('@mnnit.ac.in')) {
+      setErrorMessage('Please use your official college email (e.g. name.regno@mnnit.ac.in)');
+      setLoading(false);
+      sound.playError();
+      return;
+    }
+
+    try {
       if (isSignUp) {
-        // Sign up flow
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        
-        // Update user profile display name if entered
         if (fullName.trim()) {
-          await updateProfile(userCredential.user, {
-            displayName: fullName.trim()
-          });
+          await updateProfile(userCredential.user, { displayName: fullName.trim() });
         }
         sound.playSuccess();
       } else {
-        // Sign in flow
         await signInWithEmailAndPassword(auth, email, password);
         sound.playSuccess();
       }
     } catch (error: any) {
       sound.playError();
       const code = error.code;
-
       if (isSignUp) {
-        // Required exact message for existing account
         if (code === 'auth/email-already-in-use') {
           setErrorMessage('User already exists. Please sign in');
         } else {
-          setErrorMessage(error.message || 'Registration failed. Please check your details.');
+          setErrorMessage(error.message || 'Registration failed.');
         }
       } else {
-        // Required exact message for incorrect credentials
-        if (
-          code === 'auth/wrong-password' ||
-          code === 'auth/user-not-found' ||
-          code === 'auth/invalid-credential' ||
-          code === 'auth/invalid-email'
-        ) {
-          setErrorMessage('Email or password is incorrect');
-        } else {
-          setErrorMessage('Email or password is incorrect');
-        }
+        setErrorMessage('Email or password is incorrect');
       }
     } finally {
       setLoading(false);
@@ -70,7 +102,7 @@ export const AuthPage: React.FC = () => {
     <div className="min-h-screen bg-warmIvory dark:bg-appDark flex items-center justify-center p-4">
       <div className="max-w-4xl w-full bg-riceWhite dark:bg-surface border border-softBorder dark:border-borderDark rounded-3xl shadow-2xl overflow-hidden grid grid-cols-1 md:grid-cols-2 animate-fadeIn">
         
-        {/* Left Column: Form */}
+        {/* Left Form */}
         <div className="p-8 sm:p-10 flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-2 mb-4">
@@ -82,142 +114,143 @@ export const AuthPage: React.FC = () => {
                   MessWise
                 </h1>
                 <p className="text-[10px] text-mutedStone uppercase tracking-wider mt-0.5">
-                  The Kamar-Taj Refectory
+                  MNNIT Allahabad Refectory
                 </p>
               </div>
             </div>
 
             <div className="inline-block px-2.5 py-1 bg-turmericGold/15 border border-turmericGold/30 text-turmericGold rounded-full text-[10px] font-bold mb-3">
-              Webster 2026 • Team Terror Code 404
+              Webster 2026 • Team Terror Code 404 (ID: 254)
             </div>
 
             <h2 className="text-xl font-bold text-charcoal dark:text-textPrimary">
-              {isSignUp ? 'Create Refectory Account' : 'Sign In to Campus Refectory'}
+              {isSignUp ? 'Create Resident Account' : 'MNNIT Refectory Portal'}
             </h2>
             <p className="text-xs text-mutedStone mt-1">
-              {isSignUp 
-                ? 'Sign up with your college email and password to access refectory services.' 
-                : 'Enter your credentials to access your meal bookings and live QR pass.'}
+              Authentication restricted strictly to verified <strong>@mnnit.ac.in</strong> accounts.
             </p>
 
-            {/* Error Message Box */}
+            {/* Error Message Alert */}
             {errorMessage && (
-              <div className="mt-4 p-3 bg-red-100 border border-errorRed text-errorRed rounded-xl text-xs font-semibold animate-fadeIn">
+              <div className="mt-4 p-3 bg-red-100 border border-errorRed text-errorRed rounded-xl text-xs font-semibold leading-relaxed animate-fadeIn">
                 ⚠️ {errorMessage}
               </div>
             )}
 
-            {/* Auth Form */}
-            <form onSubmit={handleSubmit} className="mt-5 space-y-3 text-xs">
-              {isSignUp && (
+            {/* Primary Google Login Button */}
+            <div className="mt-5 space-y-3">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={handleGoogleSignIn}
+                className="w-full py-3 px-4 bg-white dark:bg-surfaceElevated hover:bg-gray-50 text-charcoal dark:text-textPrimary font-bold text-xs rounded-xl border border-gray-300 dark:border-borderDark shadow-sm flex items-center justify-center gap-3 transition-all cursor-pointer"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.27 21.36 7.33 24 12 24z"/>
+                  <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.27 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                </svg>
+                <span>Continue with Google (@mnnit.ac.in only)</span>
+              </button>
+
+              <div className="relative flex py-1 items-center">
+                <div className="flex-grow border-t border-softBorder dark:border-borderDark"></div>
+                <span className="flex-shrink mx-3 text-[10px] text-mutedStone uppercase">or email & password</span>
+                <div className="flex-grow border-t border-softBorder dark:border-borderDark"></div>
+              </div>
+
+              {/* Email & Password Form */}
+              <form onSubmit={handleEmailAuth} className="space-y-2.5 text-xs">
+                {isSignUp && (
+                  <div>
+                    <label className="font-bold block mb-1">Full Name</label>
+                    <input
+                      type="text" required placeholder="e.g. Vansshiekaa Singh" value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="w-full p-2.5 rounded-xl border border-softBorder dark:border-borderDark bg-warmIvory dark:bg-surfaceElevated"
+                    />
+                  </div>
+                )}
+
                 <div>
-                  <label className="font-bold block mb-1 text-charcoal dark:text-textPrimary">
-                    Full Name
-                  </label>
+                  <label className="font-bold block mb-1">College Email (@mnnit.ac.in)</label>
                   <input
-                    type="text"
-                    required
-                    placeholder="e.g. Vansshiekaa Singh"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-softBorder dark:border-borderDark bg-warmIvory dark:bg-surfaceElevated text-charcoal dark:text-textPrimary focus:outline-none focus:border-deepMaroon"
+                    type="email" required placeholder="name.regno@mnnit.ac.in" value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-softBorder dark:border-borderDark bg-warmIvory dark:bg-surfaceElevated"
                   />
                 </div>
-              )}
 
-              <div>
-                <label className="font-bold block mb-1 text-charcoal dark:text-textPrimary">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="student@mnnit.ac.in"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-softBorder dark:border-borderDark bg-warmIvory dark:bg-surfaceElevated text-charcoal dark:text-textPrimary focus:outline-none focus:border-deepMaroon"
-                />
+                <div>
+                  <label className="font-bold block mb-1">Password</label>
+                  <input
+                    type="password" required placeholder="••••••••" value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-softBorder dark:border-borderDark bg-warmIvory dark:bg-surfaceElevated"
+                  />
+                </div>
+
+                <button
+                  type="submit" disabled={loading}
+                  className="w-full py-2.5 bg-deepMaroon hover:bg-deepMaroon/90 text-white font-bold text-xs rounded-xl shadow-sm transition-all"
+                >
+                  {loading ? 'Processing...' : isSignUp ? 'Sign Up' : 'Sign In'}
+                </button>
+              </form>
+
+              <div className="text-center text-xs text-mutedStone pt-1">
+                {isSignUp ? (
+                  <span>Already registered? <button onClick={() => { setIsSignUp(false); setErrorMessage(null); }} className="text-deepMaroon dark:text-primaryAccent font-bold underline">Sign In</button></span>
+                ) : (
+                  <span>New resident? <button onClick={() => { setIsSignUp(true); setErrorMessage(null); }} className="text-deepMaroon dark:text-primaryAccent font-bold underline">Create Account</button></span>
+                )}
               </div>
-
-              <div>
-                <label className="font-bold block mb-1 text-charcoal dark:text-textPrimary">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-softBorder dark:border-borderDark bg-warmIvory dark:bg-surfaceElevated text-charcoal dark:text-textPrimary focus:outline-none focus:border-deepMaroon"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 bg-deepMaroon hover:bg-deepMaroon/90 text-white font-bold text-xs rounded-xl shadow-sm transition-all mt-2 cursor-pointer disabled:opacity-50"
-              >
-                {loading ? 'Processing...' : isSignUp ? 'Sign Up' : 'Sign In'}
-              </button>
-            </form>
-
-            {/* Toggle between Sign In and Sign Up */}
-            <div className="mt-4 text-center text-xs text-mutedStone">
-              {isSignUp ? (
-                <span>
-                  Already have an account?{' '}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSignUp(false);
-                      setErrorMessage(null);
-                    }}
-                    className="text-deepMaroon dark:text-primaryAccent font-bold hover:underline"
-                  >
-                    Sign In
-                  </button>
-                </span>
-              ) : (
-                <span>
-                  Don't have an account?{' '}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSignUp(true);
-                      setErrorMessage(null);
-                    }}
-                    className="text-deepMaroon dark:text-primaryAccent font-bold hover:underline"
-                  >
-                    Sign Up
-                  </button>
-                </span>
-              )}
             </div>
           </div>
 
-          <div className="text-[10px] text-mutedStone border-t border-softBorder pt-3 mt-6">
-            🔒 Secured with <strong>Firebase Authentication</strong> • Single-Session Protection
-          </div>
+          {/* Sandbox Bypass */}
+          {onBypassDemoLogin && (
+            <div className="mt-4 pt-3 border-t border-softBorder text-center">
+              <span className="text-[10px] text-mutedStone block mb-1.5">Mid-Evaluation Sandbox Bypass:</span>
+              <button
+                type="button"
+                onClick={() => onBypassDemoLogin({
+                  uid: 'demo-vansshiekaa',
+                  name: 'Vansshiekaa Singh',
+                  email: 'vansshiekaa.20259028@mnnit.ac.in',
+                  role: 'STUDENT',
+                  branch: 'Materials Engineering',
+                  hostelName: 'Sarojini Naidu Girls Hostel (SNGH)',
+                  hostelId: 'h-sngh',
+                  room: 'A-208',
+                  year: '2nd Year B.Tech'
+                })}
+                className="px-3 py-1 bg-warmIvory dark:bg-surfaceElevated border border-turmericGold text-charcoal dark:text-textPrimary text-[11px] font-bold rounded-lg hover:bg-turmericGold/20"
+              >
+                ⚡ Instant Login as MNNIT Student (Vansshiekaa)
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Right Column: Campus Identity */}
+        {/* Right Info */}
         <div className="bg-gradient-to-br from-[#531b25] to-deepMaroon text-white p-8 sm:p-10 flex flex-col justify-between">
-          <div className="space-y-4">
+          <div className="space-y-3">
             <span className="text-[10px] font-bold text-turmericGold uppercase tracking-wider bg-black/20 px-3 py-1 rounded-full border border-turmericGold/30">
-              MNNIT Allahabad Refectory Pilot
+              The Kamar-Taj Refectory
             </span>
-            <h3 className="text-2xl font-serif font-black leading-tight text-riceWhite">
+            <h3 className="text-2xl font-serif font-black leading-tight">
               "Every Meal Accounted For. Every Resource Respected."
             </h3>
             <p className="text-xs text-white/80 leading-relaxed">
-              Real-time bookings, rotating HMAC gate passes, explainable kitchen prep planning, and verified diner reviews.
+              MNNIT Allahabad hostel dining automation: meal timeline state machine, single-use 30s rotating QR check-in, vacation checkout ledger, and verified quality feedback.
             </p>
           </div>
 
-          <div className="border-t border-white/20 pt-4 text-[11px] text-white/80 space-y-1 font-mono">
+          <div className="border-t border-white/20 pt-4 text-[11px] text-white/80 space-y-0.5 font-mono">
             <div>Team: <strong>Terror Code 404 (ID: 254)</strong></div>
-            <div>Materials Engineering, MNNIT Allahabad</div>
+            <div>Vansshiekaa (20259028), Ankur (20259001), Saksham (20259023)</div>
           </div>
         </div>
 
@@ -225,3 +258,5 @@ export const AuthPage: React.FC = () => {
     </div>
   );
 };
+
+export default AuthPage;
